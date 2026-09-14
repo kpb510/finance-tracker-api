@@ -6,6 +6,9 @@ from app import models, schemas, security
 
 from fastapi.security import OAuth2PasswordRequestForm
 
+from typing import List
+from app.dependencies import get_current_user
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Personal Finance Tracker API")
@@ -45,3 +48,96 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     access_token = security.create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer"}
+
+def _get_owned_transaction_or_404(
+    transaction_id: int,
+    db: Session,
+    current_user: models.User
+) -> models.Transaction:
+    
+    transaction = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.id == transaction_id,
+            models.Transaction.owner_id == current_user.id,
+        )
+        .first()
+    )
+    
+    if transaction is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found"
+        )
+    return transaction
+
+@app.post(
+    "/transactions",
+    response_model=schemas.TransactionOut,
+    status_code=status.HTTP_201_CREATED
+)
+def create_transaction(
+    transaction: schemas.TransactionCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    new_transaction = models.Transaction(
+        **transaction.model_dump(),
+        owner_id=current_user.id
+    )
+    db.add(new_transaction)
+    db.commit()
+    db.refresh(new_transaction)
+    return new_transaction
+
+@app.get("/transactions/{transaction_id}", response_model=List[schemas.TransactionOut])
+def list_transactions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return (
+        db.query(models.Transaction)
+        .filter(models.Transaction.owner_id == current_user.id)
+        .all()
+    )
+
+@app.get(
+    "/transactions/{transaction_id}",
+    response_model=schemas.TransactionOut
+)
+def get_transaction(
+    transaction_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return _get_owned_transaction_or_404(transaction_id, db, current_user)
+
+@app.put(
+    "/transactions/{transaction_id}",
+    response_model=schemas.TransactionOut
+)
+def update_transaction(
+    transaction_id: int, 
+    updates: schemas.TransactionUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction = _get_owned_transaction_or_404(transaction_id, db, current_user)
+    for field, value in updates.model_dump(exclude_unset=True).items():
+        setattr(transaction, field, value)
+    db.commit()
+    db.refresh(transaction)
+    return transaction
+
+@app.delete(
+    "/transactions/{transaction_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_transaction(
+    transaction_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transaction = _get_owned_transaction_or_404(transaction_id, db, current_user)
+    db.delete(transaction)
+    db.commit()
