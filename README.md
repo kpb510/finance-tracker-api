@@ -110,38 +110,27 @@ All endpoints except registration and login require an `Authorization: Bearer <t
 Example: `GET /transactions?start_date=2026-09-01&category_id=2`
 
 ## Project structure:
-
+````
 finance-tracker-api/
-
-|-- app/
-
-| |-- main.py # App instance, routes, lifespan startup
-
-| |-- models.py # SQLAlchemy database models
-
-| |-- schemas.py # Pydantic request/response schemas
-
-| |-- database.py # DB engine, session, get_db dependency
-
-| |-- security.py # Password hashing, JWT creation
-
-| |-- dependencies.py # get_current_user auth dependency
-
-| |-- config.py # Environment-based configuration
-
-|-- tests/
-
-| |-- conftest.py # Test fixtures and DB override
-
-| |-- test_auth.py
-
-| |-- test_transactions.py
-
-|-- requirements.txt
-
-|-- pytest.ini
-
-|-- README.md
+├── README.md
+├── app
+│   ├── __init__.py
+│   ├── config.py
+│   ├── database.py
+│   ├── dependencies.py
+│   ├── main.py
+│   ├── models.py
+│   ├── schemas.py
+│   └── security.py
+├── finance.db
+├── pytest.ini
+├── requirements.txt
+├── test.db
+└── tests
+    ├── conftest.py
+    ├── test_auth.py
+    └── test_transactions.py
+````
 
 ## Status
 - Work in progress. See commit history for progress, phase by phase. 
