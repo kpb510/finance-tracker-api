@@ -3,15 +3,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import extract 
 from datetime import date 
-
 from app.database import Base, engine, get_db, SessionLocal
 from app import models, schemas, security 
-
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from typing import List, Optional 
 from app.dependencies import get_current_user
+from contextlib import asynccontextmanager
 
 def seed_categories(db: Session):
     """Insert default categories if none exist yet."""
@@ -23,21 +22,22 @@ def seed_categories(db: Session):
         db.add(models.Category(name=name))
     db.commit()
 
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_categories(db)
+    finally:
+        db.close()
+    yield # app runs here
 
-# Seed categories once at startup, using a throwaway session
-_db = SessionLocal()
-try:
-    seed_categories(_db)
-finally:
-    _db.close()
-
-app = FastAPI(title="Personal Finance Tracker API")
+app = FastAPI(title="Personal Finance Tracker API", lifespan=lifespan)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": "Invalid input", "errors": exc.errors()},
     )
     
