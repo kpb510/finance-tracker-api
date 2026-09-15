@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine, get_db
+from app.database import Base, engine, get_db, SessionLocal
 from app import models, schemas, security 
 
 from fastapi.security import OAuth2PasswordRequestForm
@@ -9,7 +9,24 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import List
 from app.dependencies import get_current_user
 
+def seed_categories(db: Session):
+    """Insert default categories if none exist yet."""
+    if db.query(models.Category).first() is not None:
+        return # already seeded
+    
+    defaults = ["Food", "Transport", "Bills", "Entertainment", "Shopping", "Health", "Other"]
+    for name in defaults:
+        db.add(models.Category(name=name))
+    db.commit()
+
 Base.metadata.create_all(bind=engine)
+
+# Seed categories once at startup, using a throwaway session
+_db = SessionLocal()
+try:
+    seed_categories(_db)
+finally:
+    _db.close()
 
 app = FastAPI(title="Personal Finance Tracker API")
 
@@ -81,6 +98,15 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    
+    if transaction.category_id is not None:
+        category = db.query(models.Category).filter(models.Category.id == transaction.category_id).first()
+        if category is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Category does not exist"
+            )
+    
     new_transaction = models.Transaction(
         **transaction.model_dump(),
         owner_id=current_user.id
@@ -141,3 +167,35 @@ def delete_transaction(
     transaction = _get_owned_transaction_or_404(transaction_id, db, current_user)
     db.delete(transaction)
     db.commit()
+    
+@app.get(
+    "/categories",
+    response_model=List[schemas.CategoryOut]
+)
+def list_categories(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return db.query(models.Category).all()
+
+@app.post(
+    "/categories",
+    response_model=schemas.CategoryOut,
+    status_code=status.HTTP_201_CREATED
+)
+def create_category(
+    category: schemas.CategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    existing = db.query(models.Category).filter(models.Category.name == category.name).first()
+    if existing: 
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category already exists"
+        )
+    new_category = models.Category(name=category.name)
+    db.add(new_category)
+    db.commit()
+    db.refresh(new_category)
+    return new_category

@@ -40,5 +40,14 @@ class TransactionOut(TransactionBase):
     owner_id: int
     
     model_config = ConfigDict(from_attributes=True)
+
+class CategoryCreate(BaseModel):
+    name: str
+    
+class CategoryOut(BaseModel):
+    id: int
+    name: str
+    
+    model_config = ConfigDict(from_attributes=True)
     
     
