@@ -112,20 +112,35 @@ Example: `GET /transactions?start_date=2026-09-01&category_id=2`
 ## Project structure:
 
 finance-tracker-api/
+
 |-- app/
+
 | |-- main.py # App instance, routes, lifespan startup
+
 | |-- models.py # SQLAlchemy database models
+
 | |-- schemas.py # Pydantic request/response schemas
+
 | |-- database.py # DB engine, session, get_db dependency
+
 | |-- security.py # Password hashing, JWT creation
+
 | |-- dependencies.py # get_current_user auth dependency
-│ |-- config.py # Environment-based configuration
+
+| |-- config.py # Environment-based configuration
+
 |-- tests/
+
 | |-- conftest.py # Test fixtures and DB override
+
 | |-- test_auth.py
+
 | |-- test_transactions.py
+
 |-- requirements.txt
+
 |-- pytest.ini
+
 |-- README.md
 
 ## Status
