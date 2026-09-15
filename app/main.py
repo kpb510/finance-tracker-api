@@ -1,12 +1,15 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from sqlalchemy import extract 
+from datetime import date 
+
 from app.database import Base, engine, get_db, SessionLocal
 from app import models, schemas, security 
 
 from fastapi.security import OAuth2PasswordRequestForm
 
-from typing import List
+from typing import List, Optional 
 from app.dependencies import get_current_user
 
 def seed_categories(db: Session):
@@ -116,16 +119,24 @@ def create_transaction(
     db.refresh(new_transaction)
     return new_transaction
 
-@app.get("/transactions/{transaction_id}", response_model=List[schemas.TransactionOut])
+@app.get("/transactions", response_model=List[schemas.TransactionOut])
 def list_transactions(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    category_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    return (
-        db.query(models.Transaction)
-        .filter(models.Transaction.owner_id == current_user.id)
-        .all()
-    )
+    query = db.query(models.Transaction).filter(models.Transaction.owner_id == current_user.id)
+    
+    if start_date is not None:
+        query = query.filter(models.Transaction.date >= start_date)
+    if end_date is not None:
+        query = query.filter(models.Transaction.date <= end_date)
+    if category_id is not None:
+        query = query.filter(models.Transaction.category_id == category_id)
+    
+    return query.all()
 
 @app.get(
     "/transactions/{transaction_id}",
@@ -199,3 +210,31 @@ def create_category(
     db.commit()
     db.refresh(new_category)
     return new_category
+
+@app.get("/summary/monthly", response_model=schemas.MonthlySummary)
+def monthly_summary(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    transactions = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.owner_id == current_user.id,
+            extract("year", models.Transaction.date) == year,
+            extract("month", models.Transaction.date) == month,
+        )
+        .all()
+    )
+    
+    total_income = sum(t.amount for t in transactions if t.type == "income")
+    total_expense = sum(t.amount for t in transactions if t.type == "expense")
+    
+    return schemas.MonthlySummary(
+        year=year,
+        month=month,
+        total_income=total_income,
+        total_expense=total_expense,
+        net=total_income - total_expense,
+    )

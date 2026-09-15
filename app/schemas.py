@@ -49,5 +49,12 @@ class CategoryOut(BaseModel):
     name: str
     
     model_config = ConfigDict(from_attributes=True)
+
+class MonthlySummary(BaseModel):
+    year: int
+    month: int
+    total_income: float
+    total_expense: float 
+    net: float 
     
     
