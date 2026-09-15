@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import extract 
 from datetime import date 
 
@@ -8,7 +8,8 @@ from app.database import Base, engine, get_db, SessionLocal
 from app import models, schemas, security 
 
 from fastapi.security import OAuth2PasswordRequestForm
-
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from typing import List, Optional 
 from app.dependencies import get_current_user
 
@@ -33,6 +34,20 @@ finally:
 
 app = FastAPI(title="Personal Finance Tracker API")
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Invalid input", "errors": exc.errors()},
+    )
+    
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An unexpected error occurred"},
+    )
+    
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -51,7 +66,12 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         hashed_password=security.hash_password(user.password),
     )
     db.add(new_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+    
     db.refresh(new_user)
     return new_user
 

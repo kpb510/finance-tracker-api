@@ -1,11 +1,15 @@
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import date
 from typing import Optional 
+from enum import Enum
+
+class TransactionType(str, Enum):
+    income = "income"
+    expense = "expense"
 
 class UserCreate(BaseModel):
-    """What the client sends us to register. """
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
 
 class UserOut(BaseModel):
     """What we send back - notice there is no password field at all."""
@@ -19,13 +23,13 @@ class Token(BaseModel):
     token_type: str = "bearer"
     
 class TransactionBase(BaseModel):
-    amount: float
+    amount: float = Field(gt=0)
     description: Optional[str] = None
     date: date
-    type: str # "income" or "expense"
+    type: TransactionType
     category_id: Optional[int] = None
 
-class TransactionCrete(TransactionBase):
+class TransactionCreate(TransactionBase):
     pass
 
 class TransactionUpdate(BaseModel):
