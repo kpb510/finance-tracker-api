@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import date
 from typing import Optional 
 
@@ -56,5 +56,20 @@ class MonthlySummary(BaseModel):
     total_income: float
     total_expense: float 
     net: float 
+
+class BudgetCreate(BaseModel):
+    amount: float = Field(gt=0)
+    month: int = Field(ge=1, le=12)
+    year: int = Field(ge=2000, le=2100)
+    category_id: Optional[int] = None
     
+class BudgetOut(BaseModel):
+    id: int
+    amount: float
+    month: int
+    year: int
+    category_id: Optional[int] = None 
+    spent: float
+    remaining: float
     
+    model_config = ConfigDict(from_attributes=True)   

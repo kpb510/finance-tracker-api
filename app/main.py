@@ -238,3 +238,77 @@ def monthly_summary(
         total_expense=total_expense,
         net=total_income - total_expense,
     )
+    
+
+
+
+def _calculate_spent(
+    db: Session,
+    current_user: models.User,
+    month: int,
+    year: int,
+    category_id: Optional[int],
+) -> float:
+    query = db.query(models.Transaction).filter(
+        models.Transaction.owner_id == current_user.id,
+        models.Transaction.type == "expense",
+        extract("year", models.Transaction.date) == year,
+        extract("month", models.Transaction.date) == month,
+    )
+    if category_id is not None:
+        query = query.filter(models.Transaction.category_id == category_id)
+    
+    return sum(t.amount for t in query.all())
+
+@app.post("/budgets", response_model=schemas.BudgetOut, status_code=status.HTTP_201_CREATED)
+def create_budget(
+    budget: schemas.BudgetCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if budget.category_id is not None:
+        category = db.query(models.Category).filter(models.Category.id == budget.category_id).first()
+        if category is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Category does not exist")
+    
+    new_budget = models.Budget(
+        amount=budget.amount,
+        month=budget.month,
+        year=budget.year,
+        category_id=budget.category_id,
+        owner_id=current_user.id,
+    )
+    db.add(new_budget)
+    db.commit()
+    db.refresh(new_budget)
+    
+    spent = _calculate_spent(db, current_user, new_budget.month, new_budget.year, new_budget.category_id)
+    return schemas.BudgetOut(
+        id=new_budget.id,
+        amount=new_budget.amount,
+        month=new_budget.month,
+        year=new_budget.year,
+        category_id=new_budget.category_id,
+        spent=spent,
+        remaining=new_budget.amount - spent,
+    )
+
+@app.get("/budgets", response_model=List[schemas.BudgetOut])
+def list_budgets(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    budgets = db.query(models.Budget).filter(models.Budget.owner_id == current_user.id).all()
+    
+    return [
+        schemas.BudgetOut(
+            id=b.id,
+            amount=b.amount,
+            month=b.month,
+            year=b.year, 
+            category_id=b.category_id,
+            spent=_calculate_spent(db, current_user, b.month, b.year, b.category_id),
+            remaining=b.amount - _calculate_spent(db, current_user, b.month, b.year, b.category_id),
+        )
+        for b in budgets
+    ]
